@@ -28,33 +28,41 @@ export default function EngagementAnalysis({ videos }: EngagementAnalysisProps) 
   const [activeTab, setActiveTab] = useState<'scatter' | 'trend'>('trend');
   const [analysis, setAnalysis] = useState<string>('');
 
-  // 참여율 데이터 계산
-  const engagementData = videos.map(video => {
-    const views = parseInt(video.viewCount);
-    const likes = parseInt(video.likeCount);
-    const comments = parseInt(video.commentCount);
-    
-    return {
-      title: video.title,
-      views,
-      likeRatio: (likes / views) * 100,
-      commentRatio: (comments / views) * 100,
-      totalEngagement: ((likes + comments) / views) * 100
-    };
-  });
+  // 참회수가 0인 영상을 제외하고 참여율 데이터 계산
+  const engagementData = videos
+    .filter(video => parseInt(video.viewCount) > 0) // 조회수가 0인 영상 제외
+    .map(video => {
+      const views = parseInt(video.viewCount);
+      const likes = parseInt(video.likeCount);
+      const comments = parseInt(video.commentCount);
+      
+      return {
+        title: video.title,
+        views,
+        likeRatio: (likes / views) * 100,
+        commentRatio: (comments / views) * 100,
+        totalEngagement: ((likes + comments) / views) * 100
+      };
+    });
 
-  // 평균 참여율 계산
-  const averageEngagement = {
-    likeRatio: engagementData.reduce((sum, video) => sum + video.likeRatio, 0) / videos.length,
-    commentRatio: engagementData.reduce((sum, video) => sum + video.commentRatio, 0) / videos.length,
-    totalEngagement: engagementData.reduce((sum, video) => sum + video.totalEngagement, 0) / videos.length
+  // 평균 참여율 계산 (유효한 데이터만 사용)
+  const averageEngagement = engagementData.length > 0 ? {
+    likeRatio: engagementData.reduce((sum, video) => sum + video.likeRatio, 0) / engagementData.length,
+    commentRatio: engagementData.reduce((sum, video) => sum + video.commentRatio, 0) / engagementData.length,
+    totalEngagement: engagementData.reduce((sum, video) => sum + video.totalEngagement, 0) / engagementData.length
+  } : {
+    likeRatio: 0,
+    commentRatio: 0,
+    totalEngagement: 0
   };
 
-  // 시간에 따른 참여율 데이터 계산
+  // 시간에 따른 참여율 데이터 계산 (조회수 0 제외)
   const trendData = videos
+    .filter(video => parseInt(video.viewCount) > 0)
     .map(video => ({
       date: new Date(video.publishedAt),
       title: video.title,
+      views: parseInt(video.viewCount),
       engagement: ((parseInt(video.likeCount) + parseInt(video.commentCount)) / parseInt(video.viewCount)) * 100
     }))
     .sort((a, b) => a.date.getTime() - b.date.getTime())
@@ -97,7 +105,14 @@ export default function EngagementAnalysis({ videos }: EngagementAnalysisProps) 
             <svg className="w-5 h-5 text-blue-500 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
-            <p className="text-sm text-blue-800">{analysis}</p>
+            <div>
+              <p className="text-sm text-blue-800">{analysis}</p>
+              {videos.length !== engagementData.length && (
+                <p className="text-xs text-gray-500 mt-1">
+                  * 조회수가 0인 {videos.length - engagementData.length}개의 영상은 분석에서 제외되었습니다.
+                </p>
+              )}
+            </div>
           </div>
         </div>
       )}
@@ -109,17 +124,26 @@ export default function EngagementAnalysis({ videos }: EngagementAnalysisProps) 
           <p className="text-2xl font-bold text-gray-900">
             {averageEngagement.likeRatio.toFixed(2)}%
           </p>
+          <p className="text-xs text-gray-500 mt-1">
+            분석 대상: {engagementData.length}개 영상
+          </p>
         </div>
         <div className="bg-gray-50 p-4 rounded-lg">
           <h3 className="text-sm font-semibold text-gray-900">평균 댓글 비율</h3>
           <p className="text-2xl font-bold text-gray-900">
             {averageEngagement.commentRatio.toFixed(2)}%
           </p>
+          <p className="text-xs text-gray-500 mt-1">
+            분석 대상: {engagementData.length}개 영상
+          </p>
         </div>
         <div className="bg-gray-50 p-4 rounded-lg">
           <h3 className="text-sm font-semibold text-gray-900">평균 총 참여율</h3>
           <p className="text-2xl font-bold text-gray-900">
             {averageEngagement.totalEngagement.toFixed(2)}%
+          </p>
+          <p className="text-xs text-gray-500 mt-1">
+            분석 대상: {engagementData.length}개 영상
           </p>
         </div>
       </div>

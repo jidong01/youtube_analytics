@@ -1,4 +1,4 @@
-import openai
+from openai import AsyncOpenAI
 from typing import List, Dict
 import os
 import json
@@ -6,9 +6,11 @@ from dotenv import load_dotenv
 import random
 
 load_dotenv()
-openai.api_key = os.getenv('OPENAI_API_KEY')
 
 class OpenAIService:
+    def __init__(self):
+        self.client = AsyncOpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+
     async def analyze_comments(self, comments: List[str]) -> Dict:
         try:
             if not comments:
@@ -17,8 +19,8 @@ class OpenAIService:
             # 댓글 샘플링 및 전처리
             sampled_comments = self._prepare_comments(comments)
             
-            response = await openai.ChatCompletion.acreate(
-                model="gpt-3.5-turbo-16k",  # 더 큰 컨텍스트 윈도우를 가진 모델 사용
+            response = await self.client.chat.completions.create(
+                model="gpt-3.5-turbo-16k",
                 messages=[
                     {
                         "role": "system",
@@ -59,7 +61,7 @@ class OpenAIService:
                 max_tokens=4000
             )
 
-            content = response.choices[0].message['content']
+            content = response.choices[0].message.content
             
             try:
                 return json.loads(content)
@@ -70,62 +72,6 @@ class OpenAIService:
         except Exception as e:
             print(f"Error in analyze_comments: {str(e)}")
             return self._get_error_analysis(str(e))
-
-    def _prepare_comments(self, comments: List[str]) -> str:
-        """댓글을 전처리하고 샘플링합니다."""
-        # 빈 댓글 제거
-        filtered_comments = [c for c in comments if c and len(c.strip()) > 0]
-        
-        # 중복 제거
-        unique_comments = list(set(filtered_comments))
-        
-        # 댓글이 너무 많으면 샘플링
-        if len(unique_comments) > 100:
-            sampled_comments = random.sample(unique_comments, 100)
-        else:
-            sampled_comments = unique_comments
-        
-        # 각 댓글의 길이 제한
-        processed_comments = [
-            comment[:200] + '...' if len(comment) > 200 else comment
-            for comment in sampled_comments
-        ]
-        
-        return '\n'.join(processed_comments)
-
-    def _get_empty_analysis(self) -> Dict:
-        return {
-            "keywords": [],
-            "sentiment": {
-                "positive": 0,
-                "negative": 0,
-                "neutral": 100,
-                "examples": {
-                    "positive": [],
-                    "negative": [],
-                    "neutral": []
-                }
-            },
-            "categories": [],
-            "feedback": []
-        }
-
-    def _get_error_analysis(self, error_message: str) -> Dict:
-        return {
-            "keywords": [],
-            "sentiment": {
-                "positive": 0,
-                "negative": 0,
-                "neutral": 100,
-                "examples": {
-                    "positive": [],
-                    "negative": [],
-                    "neutral": []
-                }
-            },
-            "categories": [],
-            "feedback": [{"type": "오류", "content": error_message, "examples": []}]
-        }
 
     async def analyze_chart_data(self, chart_type: str, data: dict) -> str:
         try:
@@ -199,7 +145,64 @@ class OpenAIService:
                 max_tokens=100
             )
             
-            return response.choices[0].message.content.strip()
+            return response.choices[0].message.content
+            
         except Exception as e:
             print(f"Error in analyze_chart_data: {str(e)}")
             return None
+
+    def _prepare_comments(self, comments: List[str]) -> str:
+        """댓글을 전처리하고 샘플링합니다."""
+        # 빈 댓글 제거
+        filtered_comments = [c for c in comments if c and len(c.strip()) > 0]
+        
+        # 중복 제거
+        unique_comments = list(set(filtered_comments))
+        
+        # 댓글이 너무 많으면 샘플링
+        if len(unique_comments) > 100:
+            sampled_comments = random.sample(unique_comments, 100)
+        else:
+            sampled_comments = unique_comments
+        
+        # 각 댓글의 길이 제한
+        processed_comments = [
+            comment[:200] + '...' if len(comment) > 200 else comment
+            for comment in sampled_comments
+        ]
+        
+        return '\n'.join(processed_comments)
+
+    def _get_empty_analysis(self) -> Dict:
+        return {
+            "keywords": [],
+            "sentiment": {
+                "positive": 0,
+                "negative": 0,
+                "neutral": 100,
+                "examples": {
+                    "positive": [],
+                    "negative": [],
+                    "neutral": []
+                }
+            },
+            "categories": [],
+            "feedback": []
+        }
+
+    def _get_error_analysis(self, error_message: str) -> Dict:
+        return {
+            "keywords": [],
+            "sentiment": {
+                "positive": 0,
+                "negative": 0,
+                "neutral": 100,
+                "examples": {
+                    "positive": [],
+                    "negative": [],
+                    "neutral": []
+                }
+            },
+            "categories": [],
+            "feedback": [{"type": "오류", "content": error_message, "examples": []}]
+        }

@@ -1,5 +1,5 @@
 import { formatDistanceToNow } from 'date-fns';
-import ko from 'date-fns/locale/ko';
+import { ko } from 'date-fns/locale';
 import Link from 'next/link';
 
 interface Video {

@@ -3,6 +3,7 @@ from typing import Optional, Dict, Any, List
 import os
 from dotenv import load_dotenv
 import asyncio
+from googleapiclient.errors import HttpError
 
 load_dotenv()
 
@@ -98,43 +99,35 @@ class YouTubeService:
             print(f"Error fetching channel videos: {e}")
             return None
 
-    async def get_video_comments(self, video_id: str, max_results: int = 100):
+    async def get_video_comments(self, video_id: str) -> List[Dict]:
         try:
-            comments = []
-            next_page_token = None
-
-            while len(comments) < max_results:
-                request = self.youtube.commentThreads().list(
-                    part="snippet",
-                    videoId=video_id,
-                    maxResults=min(100, max_results - len(comments)),
-                    pageToken=next_page_token,
-                    textFormat="plainText"
-                )
-
-                try:
-                    response = request.execute()
-                except Exception as e:
-                    print(f"Error fetching comments: {str(e)}")
-                    break
-
-                for item in response.get("items", []):
-                    comment = item["snippet"]["topLevelComment"]["snippet"]
-                    comments.append({
-                        "text": comment["textDisplay"],
-                        "author": comment["authorDisplayName"],
-                        "likeCount": comment.get("likeCount", 0),
-                        "publishedAt": comment["publishedAt"]
-                    })
-
-                next_page_token = response.get("nextPageToken")
-                if not next_page_token:
-                    break
-
-            return comments
-
+            response = await self.youtube.commentThreads().list(
+                part='snippet',
+                videoId=video_id,
+                maxResults=100,
+                textFormat='plainText'
+            ).execute()
+            
+            return [
+                {
+                    'author': item['snippet']['topLevelComment']['snippet']['authorDisplayName'],
+                    'text': item['snippet']['topLevelComment']['snippet']['textDisplay'],
+                    'publishedAt': item['snippet']['topLevelComment']['snippet']['publishedAt'],
+                    'likeCount': item['snippet']['topLevelComment']['snippet']['likeCount'],
+                    'authorChannelId': item['snippet']['topLevelComment']['snippet'].get('authorChannelId', {}),
+                }
+                for item in response.get('items', [])
+            ]
+        except HttpError as e:
+            if 'commentsDisabled' in str(e):
+                # 댓글이 비활성화된 경우 빈 리스트 반환
+                return []
+            else:
+                # 다른 에러의 경우 로그 기록 후 빈 리스트 반환
+                print(f"Error fetching comments: {str(e)}")
+                return []
         except Exception as e:
-            print(f"Error in get_video_comments: {str(e)}")
+            print(f"Unexpected error fetching comments: {str(e)}")
             return []
 
     async def get_channel_comments(self, channel_id: str) -> List[Dict]:
@@ -170,3 +163,42 @@ class YouTubeService:
         except Exception as e:
             print(f"Error in get_channel_comments: {str(e)}")
             return []
+
+    async def get_video_details(self, video_id: str) -> Dict:
+        try:
+            response = await self.youtube.videos().list(
+                part='snippet,statistics,contentDetails',
+                id=video_id
+            ).execute()
+
+            if not response['items']:
+                return None
+
+            video = response['items'][0]
+            content_details = video.get('contentDetails', {})
+            
+            # 해상도 정보 추출
+            resolution = content_details.get('definition', '')  # 'hd' or 'sd'
+            
+            # 기본 해상도 설정 (실제 값은 API 응답에서 확인 필요)
+            if resolution == 'hd':
+                width = 1920
+                height = 1080
+            else:
+                width = 1280
+                height = 720
+            
+            return {
+                'id': video['id'],
+                'title': video['snippet']['title'],
+                'publishedAt': video['snippet']['publishedAt'],
+                'viewCount': video['statistics'].get('viewCount', '0'),
+                'likeCount': video['statistics'].get('likeCount', '0'),
+                'commentCount': video['statistics'].get('commentCount', '0'),
+                'duration': content_details['duration'],
+                'width': width,
+                'height': height
+            }
+        except Exception as e:
+            print(f"Error fetching video details: {str(e)}")
+            return None

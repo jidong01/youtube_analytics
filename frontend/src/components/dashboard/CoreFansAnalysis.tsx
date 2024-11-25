@@ -21,7 +21,8 @@ interface CoreFan {
   comments: Comment[];
   uniqueVideos: number;
   lastComment: string;
-  lastCommentDate: string;
+  firstActivityDate: string;
+  lastActivityDate: string;
   engagementRate: number;
 }
 
@@ -30,11 +31,74 @@ interface CoreFansAnalysisProps {
   channelTitle: string;
 }
 
+interface FanCommentsModalProps {
+  fan: CoreFan;
+  onClose: () => void;
+}
+
+function FanCommentsModal({ fan, onClose }: FanCommentsModalProps) {
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-lg w-full max-w-3xl max-h-[80vh] overflow-hidden">
+        <div className="p-6 border-b">
+          <div className="flex justify-between items-center">
+            <h3 className="text-xl font-semibold">
+              {fan.author}님의 모든 댓글 ({fan.comments.length}개)
+            </h3>
+            <button
+              onClick={onClose}
+              className="text-gray-500 hover:text-gray-700"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        </div>
+        <div className="p-6 overflow-y-auto max-h-[calc(80vh-120px)]">
+          {fan.comments.sort((a, b) => 
+            new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()
+          ).map((comment, index) => (
+            <div key={index} className="mb-6 last:mb-0">
+              <div className="flex justify-between items-start mb-2">
+                <div>
+                  <h4 className="font-medium text-blue-600 hover:underline">
+                    <a href={`https://youtube.com/watch?v=${comment.videoId}`} target="_blank" rel="noopener noreferrer">
+                      {comment.videoTitle}
+                    </a>
+                  </h4>
+                  <p className="text-sm text-gray-500">
+                    {new Date(comment.publishedAt).toLocaleDateString('ko-KR', {
+                      year: 'numeric',
+                      month: 'long',
+                      day: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    })}
+                  </p>
+                </div>
+                <div className="flex items-center text-sm text-gray-500">
+                  <svg className="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                    <path d="M2 10.5a1.5 1.5 0 113 0v6a1.5 1.5 0 01-3 0v-6zM6 10.333v5.43a2 2 0 001.106 1.79l.05.025A4 4 0 008.943 18h5.416a2 2 0 001.962-1.608l1.2-6A2 2 0 0015.56 8H12V4a2 2 0 00-2-2 1 1 0 00-1 1v.667a4 4 0 01-.8 2.4L6.8 7.933a4 4 0 00-.8 2.4z" />
+                  </svg>
+                  {comment.likeCount}
+                </div>
+              </div>
+              <p className="text-gray-700 bg-gray-50 p-3 rounded-lg">{comment.text}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function CoreFansAnalysis({ channelId, channelTitle }: CoreFansAnalysisProps) {
   const [comments, setComments] = useState<Comment[]>([]);
   const [coreFans, setCoreFans] = useState<CoreFan[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [selectedFan, setSelectedFan] = useState<CoreFan | null>(null);
 
   useEffect(() => {
     const fetchComments = async () => {
@@ -44,8 +108,8 @@ export default function CoreFansAnalysis({ channelId, channelTitle }: CoreFansAn
         
         // 채널 주인의 댓글 제외
         const filteredComments = channelComments.filter((comment: Comment) => 
-          comment.author.toLowerCase() !== channelTitle.toLowerCase() &&  // 채널명으로 필터링
-          !comment.authorChannelId?.value?.includes(channelId)  // 채널 ID로 필터링 (더 정확)
+          comment.author.toLowerCase() !== channelTitle.toLowerCase() &&
+          !comment.authorChannelId?.value?.includes(channelId)
         );
 
         setComments(filteredComments);
@@ -74,21 +138,29 @@ export default function CoreFansAnalysis({ channelId, channelTitle }: CoreFansAn
           fansMap.set(comment.author, fanData);
         });
 
-        // 핵심 팬 선별
+        // 핵심 팬 선별 (날짜 정렬 로직 추가)
         const coreFansData = Array.from(fansMap.entries())
-          .map(([author, data]) => ({
-            author,
-            commentCount: data.commentCount,
-            totalLikes: data.totalLikes,
-            comments: data.comments,
-            uniqueVideos: data.videoIds.size,
-            lastComment: data.comments[data.comments.length - 1].text,
-            lastCommentDate: data.comments[data.comments.length - 1].publishedAt,
-            engagementRate: data.videoIds.size / channelComments.length
-          }))
-          .filter(fan => fan.commentCount >= 3)  // 최소 3개 이상 댓글
+          .map(([author, data]) => {
+            // 댓글을 날짜순으로 정렬
+            const sortedComments = data.comments.sort((a, b) => 
+              new Date(a.publishedAt).getTime() - new Date(b.publishedAt).getTime()
+            );
+
+            return {
+              author,
+              commentCount: data.commentCount,
+              totalLikes: data.totalLikes,
+              comments: sortedComments,
+              uniqueVideos: data.videoIds.size,
+              lastComment: sortedComments[sortedComments.length - 1].text,
+              firstActivityDate: sortedComments[0].publishedAt,
+              lastActivityDate: sortedComments[sortedComments.length - 1].publishedAt,
+              engagementRate: data.videoIds.size / channelComments.length
+            };
+          })
+          .filter(fan => fan.commentCount >= 3)
           .sort((a, b) => b.commentCount - a.commentCount)
-          .slice(0, 10);  // 상위 10명
+          .slice(0, 10);
 
         setCoreFans(coreFansData);
         
@@ -103,7 +175,7 @@ export default function CoreFansAnalysis({ channelId, channelTitle }: CoreFansAn
     if (channelId) {
       fetchComments();
     }
-  }, [channelId, channelTitle]);  // channelTitle 의존성 추가
+  }, [channelId, channelTitle]);
 
   if (isLoading) {
     return (
@@ -148,9 +220,19 @@ export default function CoreFansAnalysis({ channelId, channelTitle }: CoreFansAn
                 <div className="text-sm text-gray-500 mt-1">
                   최근 영상 참여율: {(fan.engagementRate * 100).toFixed(1)}%
                 </div>
-              </div>
-              <div className="text-right text-sm text-gray-500">
-                마지막 활동: {new Date(fan.lastCommentDate).toLocaleDateString()}
+                <div className="text-sm text-gray-500 mt-1">
+                  활동 기간: {new Date(fan.firstActivityDate).toLocaleDateString()} ~ {new Date(fan.lastActivityDate).toLocaleDateString()}
+                  {' '}
+                  <span className="text-gray-400">
+                    ({Math.ceil((new Date(fan.lastActivityDate).getTime() - new Date(fan.firstActivityDate).getTime()) / (1000 * 60 * 60 * 24))}일)
+                  </span>
+                </div>
+                <button
+                  onClick={() => setSelectedFan(fan)}
+                  className="mt-2 text-sm text-blue-600 hover:text-blue-800 font-medium"
+                >
+                  모든 댓글 보기 →
+                </button>
               </div>
             </div>
             <div className="mt-2 text-sm text-gray-600 italic">
@@ -161,6 +243,13 @@ export default function CoreFansAnalysis({ channelId, channelTitle }: CoreFansAn
           </div>
         ))}
       </div>
+
+      {selectedFan && (
+        <FanCommentsModal
+          fan={selectedFan}
+          onClose={() => setSelectedFan(null)}
+        />
+      )}
     </div>
   );
 } 

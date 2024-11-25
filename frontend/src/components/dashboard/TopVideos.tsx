@@ -20,7 +20,6 @@ interface Video {
   
     return (
       <div className="bg-white rounded-lg shadow-lg p-6 mb-8">
-        <h2 className="text-xl font-bold mb-4 text-gray-900">인기 동영상 TOP 10</h2>
         <div className="space-y-4">
           {topVideos.map((video, index) => (
             <div key={video.id} className="flex items-center space-x-4 p-4 hover:bg-gray-50 rounded-lg">
